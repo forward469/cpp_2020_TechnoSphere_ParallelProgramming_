@@ -61,8 +61,8 @@ private:
     int cnt_workers; // Count of workers
     int max_workers; // Maximum of workers
 
-    std::mutex Change_Lock; // For safe change 'cnt_workers'
-    std::condition_variable All_Done; // To 'notify_all'
+    std::mutex change_lock; // For safe change 'cnt_workers'
+    std::condition_variable all_done; // To 'notify_all'
 };
 
 } // namespace MTblocking

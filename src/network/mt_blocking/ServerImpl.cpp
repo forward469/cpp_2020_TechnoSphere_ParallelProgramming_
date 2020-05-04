@@ -85,9 +85,9 @@ void ServerImpl::Stop() {
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
 
-    std::unique_lock<std::mutex> lock(Change_Lock);
-    while (running.load() || cnt_workers){
-      All_Done.wait(lock);
+    std::unique_lock<std::mutex> lock(change_lock);
+    while (cnt_workers){
+      all_done.wait(lock);
     }
 }
 
@@ -97,9 +97,9 @@ void ServerImpl::Join() {
     _thread.join();
     close(_server_socket);
 
-    std::unique_lock<std::mutex> lock(Change_Lock);
+    std::unique_lock<std::mutex> lock(change_lock);
     while (running.load() || cnt_workers) {
-      All_Done.wait(lock);
+      all_done.wait(lock);
     }
 }
 
@@ -111,20 +111,24 @@ void ServerImpl::WorkerProcessing(int client_socket){
   std::unique_ptr<Execute::Command> command_to_execute;
 
   try{
-    std::size_t ReadedBytes = 0;
+    int ReadedBytes = 0;
     char ClientBuffer[4096];
+    ReadedBytes = read(client_socket, ClientBuffer, sizeof(ClientBuffer))
+    ReadedBytes = ReadedBytes ? ReadedBytes > 0 : 0;
 
-    while ((ReadedBytes = read(client_socket, ClientBuffer, sizeof(ClientBuffer))) > 0){
+    while (running.load() && (ReadedBytes > 0){
       _logger->debug("Got {} bytes from socket", ReadedBytes);
-      while (ReadedBytes > 0){
+      while (running.load() && ReadedBytes > 0){
         if (!command_to_execute){
           std::size_t _parsed = 0;
           if (parser.Parse(ClientBuffer, ReadedBytes, _parsed)){
             _logger->debug("New command: {} in {} bytes", parser.Name(), _parsed);
             command_to_execute = parser.Build(arg_remains);
-            if (arg_remains > 0) {arg_remains += 2;}
+            if (arg_remains > 0){
+              arg_remains += 2;
+            }
           }
-          if (_parsed == 0) {
+          if (_parsed == 0){
             break;
           } else {
             std::memmove(ClientBuffer, ClientBuffer + _parsed, ReadedBytes - _parsed);
@@ -162,10 +166,10 @@ void ServerImpl::WorkerProcessing(int client_socket){
 
   close(client_socket);
 
-  std::unique_lock<std::mutex> lock(Change_Lock);
+  std::unique_lock<std::mutex> lock(change_lock);
   --cnt_workers;
   if (!cnt_workers && !running) {
-    All_Done.notify_all();
+    all_done.notify_all();
    }
 }
 
@@ -212,7 +216,7 @@ void ServerImpl::OnRun() {
 
         // TODO: Start new thread and process data from/to connection
         {
-            std::unique_lock<std::mutex> lock(Change_Lock);
+            std::unique_lock<std::mutex> lock(change_lock);
             if (cnt_workers < max_workers && running.load()){
               ++cnt_workers;
               std::thread new_worker(&ServerImpl::WorkerProcessing, this, client_socket);
