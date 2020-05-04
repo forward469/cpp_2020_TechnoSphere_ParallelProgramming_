@@ -27,12 +27,13 @@ public:
         if (_lru_head) {
              auto ptr = _lru_head->prev;
              while (ptr != _lru_head.get()) {
-                 ptr->next.reset();
                  ptr = ptr->prev;
+                 ptr->next.reset();
              }
+             _lru_head.reset();
          }
 
-        _lru_head.reset(); // TODO: Here is stack overflow
+        // _lru_head.reset(); // TODO: Here is stack overflow
     }
 
     // Implements Afina::Storage interface
